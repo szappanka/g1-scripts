@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info
+dist/
+.pytest_cache/
+
+# Secrets — NEVER commit API keys
+.env
+.env.*
+*.key
+gemini_key.txt
+
+# IDEs
+.vscode/
+.idea/
