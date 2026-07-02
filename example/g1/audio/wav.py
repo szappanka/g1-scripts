@@ -123,21 +123,24 @@ def write_wave(filename, sample_rate, samples, num_channels=1):
 
 
 def play_pcm_stream(client, pcm_list, stream_name="example", chunk_size=96000, sample_rate=16000,
-                     sleep_time=None, margin=0.3, verbose=False):
+                     margin=0.3, verbose=False):
     """
     Play PCM audio stream (16-bit little-endian format), sending data in chunks.
+
+    Chunks are sent back-to-back with no artificial delay between them, so the robot's
+    playback buffer stays fed ahead of real-time and doesn't glitch/stutter at chunk
+    boundaries. Only after the LAST chunk has been sent do we wait for however much of
+    the total audio hasn't finished playing yet (plus `margin`) -- this is what stops the
+    caller's PlayStop() (typically called right after this function returns) from cutting
+    off the tail of the audio.
 
     Parameters:
         client: An object with a PlayStream method
         pcm_list: list[int], PCM audio data in int16 format
         stream_name: Stream name, default is "example"
         chunk_size: Number of bytes to send per chunk, default is 96000 (3 seconds at 16kHz)
-        sample_rate: sample rate of the PCM data, used to time the wait between chunks (default 16000)
-        sleep_time: fixed delay between chunks in seconds -- if None (default), it is computed
-            from each chunk's actual playback duration (chunk_size / (sample_rate * 2 bytes/sample)),
-            plus `margin`. A flat delay shorter than a chunk's real playback time cuts off the tail
-            of the audio when the caller calls PlayStop() right after this function returns.
-        margin: extra seconds added on top of the computed per-chunk duration, as a safety buffer
+        sample_rate: sample rate of the PCM data, used to time the final wait (default 16000)
+        margin: extra seconds added on top of the computed remaining duration, as a safety buffer
     """
     pcm_data = bytes(pcm_list)
     stream_id = str(int(time.time() * 1000))  # Unique stream ID based on current timestamp
@@ -145,6 +148,8 @@ def play_pcm_stream(client, pcm_list, stream_name="example", chunk_size=96000, s
     chunk_index = 0
     total_size = len(pcm_data)
     bytes_per_sample = 2  # 16-bit
+    total_duration = total_size / (sample_rate * bytes_per_sample)
+    start_time = time.time()
 
     while offset < total_size:
         remaining = total_size - offset
@@ -170,5 +175,6 @@ def play_pcm_stream(client, pcm_list, stream_name="example", chunk_size=96000, s
 
         offset += current_chunk_size
         chunk_index += 1
-        wait = sleep_time if sleep_time is not None else current_chunk_size / (sample_rate * bytes_per_sample) + margin
-        time.sleep(wait)
+
+    elapsed = time.time() - start_time
+    time.sleep(max(0.0, total_duration - elapsed) + margin)

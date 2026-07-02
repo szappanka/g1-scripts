@@ -130,13 +130,19 @@ def main():
                 continue
 
             if not reply:
-                reply = "Sorry, I didn't catch that."
+                reply = "Elnézést, ezt nem értettem." if args.lang == "hu" else "Sorry, I didn't catch that."
 
             print(f"G1: {reply}\n")
 
-            # A robot felmondja. (Kézzel léptetjük a tts_index-et az SDK-quirk miatt.)
-            audio.tts_index += 1
-            audio.TtsMaker(reply, args.speaker)
+            if args.lang == "hu":
+                # A beépített TtsMaker nem tud magyarul -- edge-tts-szel szintetizálva játsszuk le.
+                pcm_bytes, _sample_rate = synthesize_pcm(reply, voice=args.voice)
+                play_pcm_stream(audio, list(pcm_bytes), "gemini_reply")
+                audio.PlayStop("gemini_reply")
+            else:
+                # A robot felmondja. (Kézzel léptetjük a tts_index-et az SDK-quirk miatt.)
+                audio.tts_index += 1
+                audio.TtsMaker(reply, args.speaker)
 
     except KeyboardInterrupt:
         print("\nViszlát!")
