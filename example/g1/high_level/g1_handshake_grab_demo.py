@@ -20,9 +20,15 @@ Menete:
   2) HOLD      -- tartja a pózt, közben méri a könyök/csukló tau_est nyugalmi
                   zajszintjét, majd figyeli, mikor ugrik ki belőle (= megfogták)
   3) SHAKE     -- ha megfogták (vagy lejárt az időzítő): a könyököt fel-le
-                  mozgatja N ciklusban -- ez a tényleges "kezet ráz" mozdulat
+                  mozgatja N ciklusban -- ez a tényleges "kezet ráz" mozdulat.
+                  Ha meg van adva --say, ekkor indul (külön szálon) a beszéd is.
   4) RETRACT   -- visszaviszi a kart pontosan a kiindulási pózba
   5) RELEASE   -- fokozatosan visszaadja az irányítást a magas szintű vezérlőnek
+
+Beszéd (--say): a beépített TtsMaker nem tud magyarul (csak kínai/angol), ezért
+ez edge-tts-szel (ingyenes, nem hivatalos MS Edge felolvasó, nem kell API-kulcs)
+szintetizál, majd a robot hangszóróján játssza le. Telepítés:
+    pip install edge-tts miniaudio
 
 FONTOS -- ELSŐ FUTTATÁS ELŐTT OLVASD EL:
 - Ez már low-level jellegű kar-vezérlés, nem a kész gyári akció-kliens. A lenti
@@ -41,10 +47,13 @@ Használat:
     python3 g1_handshake_grab_demo.py <networkInterface>
     python3 g1_handshake_grab_demo.py enp2s0 --arm left --timeout 20
     python3 g1_handshake_grab_demo.py enp2s0 --shake-amplitude 0.2 --shake-hz 2
+    python3 g1_handshake_grab_demo.py enp2s0 --say "Örülök, hogy találkoztunk!"
 
 Kilépés: Ctrl+C
 """
 
+import os
+import sys
 import time
 import math
 import argparse
@@ -57,6 +66,12 @@ from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, Cha
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.utils.crc import CRC
+from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
+
+# a hu_tts/wav modulok a ../audio mappában vannak, nem a sajátunkban
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audio"))
+from hu_tts import synthesize_pcm, DEFAULT_VOICE  # noqa: E402
+from wav import play_pcm_stream  # noqa: E402
 
 
 class PeriodicThread:
@@ -201,7 +216,7 @@ class HandshakeDemo:
     RELEASE_SECONDS = 1.0
 
     def __init__(self, arm, timeout, z_threshold, min_margin, min_hold, hit_gap, max_threshold,
-                 shake_amplitude, shake_hz, shake_cycles, kp, kd):
+                 shake_amplitude, shake_hz, shake_cycles, kp, kd, say_text, say_voice):
         prefix = "Left" if arm == "left" else "Right"
         other_prefix = "Right" if arm == "left" else "Left"
 
@@ -236,6 +251,11 @@ class HandshakeDemo:
         self.kp = kp
         self.kd = kd
 
+        self.say_text = say_text
+        self.say_voice = say_voice
+        self.audio_client = None
+        self.said = False
+
         self.crc = CRC()
         self.low_cmd = unitree_hg_msg_dds__LowCmd_()
         self.low_state = None
@@ -258,6 +278,27 @@ class HandshakeDemo:
         self.publisher.Init()
         self.subscriber = ChannelSubscriber("rt/lowstate", LowState_)
         self.subscriber.Init(self.on_lowstate, 10)
+
+        if self.say_text:
+            self.audio_client = AudioClient()
+            self.audio_client.SetTimeout(10.0)
+            self.audio_client.Init()
+
+    def speak_async(self):
+        """A megadott szöveget külön szálon mondja ki, hogy ne akassza meg a 20ms-es kar-vezérlő ciklust."""
+        if not self.say_text or self.audio_client is None or self.said:
+            return
+        self.said = True
+
+        def _run():
+            try:
+                pcm_bytes, _sample_rate = synthesize_pcm(self.say_text, voice=self.say_voice)
+                play_pcm_stream(self.audio_client, list(pcm_bytes), "handshake_greeting")
+                self.audio_client.PlayStop("handshake_greeting")
+            except Exception:
+                traceback.print_exc()
+
+        threading.Thread(target=_run, daemon=True).start()
 
     def on_lowstate(self, msg: LowState_):
         self.low_state = msg
@@ -286,6 +327,8 @@ class HandshakeDemo:
             self.calibrated = False
         elif stage == self.STAGE_RETRACT:
             self.retract_from_q = {idx: self.low_state.motor_state[idx].q for idx in self.active_joint_ids}
+        elif stage == self.STAGE_SHAKE:
+            self.speak_async()
         print(f"[fázis] {stage}")
 
     def control_tick(self):
@@ -414,6 +457,10 @@ def main():
                         help="pozíció-szabályzó merevsége (alap: 60.0)")
     parser.add_argument("--kd", type=float, default=1.5,
                         help="pozíció-szabályzó csillapítása -- ha az ízület rezeg tartás közben, növeld (alap: 1.5)")
+    parser.add_argument("--say", default=None,
+                        help="ha meg van adva, ezt a magyar szöveget mondja ki a robot, amikor rázni kezdi a kezet")
+    parser.add_argument("--voice", default=DEFAULT_VOICE,
+                        help=f"edge-tts hang a --say szöveghez (alap: {DEFAULT_VOICE}, másik opció: hu-HU-TamasNeural)")
     args = parser.parse_args()
 
     print("FIGYELEM: győződj meg róla, hogy nincs akadály a kar körül -- ez low-level kar-vezérlés.")
@@ -426,7 +473,7 @@ def main():
         min_margin=args.min_margin, min_hold=args.min_hold, hit_gap=args.hit_gap,
         max_threshold=args.max_threshold,
         shake_amplitude=args.shake_amplitude, shake_hz=args.shake_hz, shake_cycles=args.shake_cycles,
-        kp=args.kp, kd=args.kd,
+        kp=args.kp, kd=args.kd, say_text=args.say, say_voice=args.voice,
     )
     demo.init_channels()
     demo.wait_for_state()
