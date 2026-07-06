@@ -284,7 +284,13 @@ class RobotConnection:
         self.arm_action_client.SetTimeout(10.0)
         self.arm_action_client.Init()
 
-        self.gemini_chat = None  # csak akkor jön létre, ha tényleg használják (lásd ask_gemini)
+        # Mindkettőt el kell tárolni -- a genai.Client alatti httpx-kapcsolatot a
+        # könyvtár a Client __del__-jében lezárja, tehát ha csak a chat objektumot
+        # tartanánk meg, a client (lokális változó nélkül) az ask_gemini() visszatérése
+        # után rögtön törlődne, és a KÖVETKEZŐ kérdésnél "client has been closed" hibát
+        # dobna. Mindkettő csak akkor jön létre, ha tényleg használják (lásd ask_gemini).
+        self.gemini_client = None
+        self.gemini_chat = None
 
     def _on_lowstate(self, msg: LowState_):
         self.low_state = msg
@@ -326,8 +332,8 @@ class RobotConnection:
             if not api_key:
                 print("  Hiba: nincs Gemini kulcs (audio/gemini_key.txt vagy GEMINI_API_KEY env).")
                 return None
-            client = genai.Client(api_key=api_key)
-            self.gemini_chat = client.chats.create(
+            self.gemini_client = genai.Client(api_key=api_key)
+            self.gemini_chat = self.gemini_client.chats.create(
                 model="gemini-2.5-flash",
                 config=types.GenerateContentConfig(
                     system_instruction=KIDS_SYSTEM_PROMPT_HU,
