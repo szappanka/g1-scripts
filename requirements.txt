@@ -1,2 +1,4 @@
 unitree_sdk2py
 google-genai
+opencv-python
+mediapipe==0.10.9  # ujabb macOS wheelek (0.10.10+) mar nem tartalmazzak az mp.solutions API-t

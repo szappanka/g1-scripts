@@ -27,6 +27,12 @@ See [MAC_CONNECTION.md](MAC_CONNECTION.md) for how to connect a Mac to the G1 ov
 
 - `example/g1/lidar/g1_lidar_viewer.py` — lidar point cloud viewer
 
+### Movement
+
+- `example/g1/high_level/g1_handshake_grab_demo.py` — handshake with grab detection via arm_sdk
+- `example/g1/high_level/g1_pose_mimic_preview.py` — webcam + MediaPipe Pose overlay, no robot (test the vision pipeline first)
+- `example/g1/high_level/g1_pose_mimic.py` — robot arm(s) + waist follow your upper-body movement live via arm_sdk (`--dry-run --show` to test without connecting; legs/balance always stay on the robot's built-in controller, not a whole-body/gait mimic)
+
 ## Usage
 
 ```bash
