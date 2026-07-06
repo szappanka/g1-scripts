@@ -23,7 +23,8 @@ Menete:
                   mozgatja N ciklusban -- ez a tényleges "kezet ráz" mozdulat.
                   Ha meg van adva --say, ekkor indul (külön szálon) a beszéd is.
   4) RETRACT   -- visszaviszi a kart pontosan a kiindulási pózba
-  5) RELEASE   -- fokozatosan visszaadja az irányítást a magas szintű vezérlőnek
+  5) SETTLE    -- rövid, mozdulatlan tartás, hogy a visszahúzás lendülete leüljön
+  6) RELEASE   -- fokozatosan visszaadja az irányítást a magas szintű vezérlőnek
 
 Beszéd (--say): a beépített TtsMaker nem tud magyarul (csak kínai/angol), ezért
 ez edge-tts-szel (ingyenes, nem hivatalos MS Edge felolvasó, nem kell API-kulcs)
@@ -207,13 +208,22 @@ class HandshakeDemo:
     STAGE_HOLD = "HOLD"
     STAGE_SHAKE = "SHAKE"
     STAGE_RETRACT = "RETRACT"
+    STAGE_SETTLE = "SETTLE"
     STAGE_RELEASE = "RELEASE"
     STAGE_DONE = "DONE"
 
     REACH_SECONDS = 2.0
     CALIB_SECONDS = 1.5
     RETRACT_SECONDS = 2.0
-    RELEASE_SECONDS = 1.0
+    # SETTLE: rövid, teljesen mozdulatlan tartás RETRACT után, teljes kp/kd-vel,
+    # MIELŐTT a RELEASE elkezdené leengedni a súlyt -- ez hagyja leülni a
+    # visszahúzás lendületét, mielőtt a magas szintű vezérlő visszakapja az
+    # irányítást. Enélkül előfordulhat, hogy a kar RELEASE közben hirtelen
+    # hátrarándul, ha a robot közben (pl. a kinyújtott kar miatt) kicsit
+    # megdőlt, és a háttérben futó magas szintű vezérlőnek felgyűlt korrekciós
+    # szándéka RELEASE-kor egyszerre "kiszabadul".
+    SETTLE_SECONDS = 0.4
+    RELEASE_SECONDS = 2.5
 
     def __init__(self, arm, timeout, z_threshold, min_margin, min_hold, hit_gap, max_threshold,
                  shake_amplitude, shake_hz, shake_cycles, kp, kd, say_text, say_voice):
@@ -416,6 +426,11 @@ class HandshakeDemo:
                 target = self.start_q[idx]  # pontosan oda megy vissza, ahonnan indultunk
                 self.write_joint(idx, (1.0 - ratio) * q0 + ratio * target)
             if ratio >= 1.0:
+                self.enter_stage(self.STAGE_SETTLE)
+
+        elif self.stage == self.STAGE_SETTLE:
+            # Nincs teendő -- a ciklus elején mindenki már start_q-ra van írva.
+            if elapsed >= self.SETTLE_SECONDS:
                 self.enter_stage(self.STAGE_RELEASE)
 
         elif self.stage == self.STAGE_RELEASE:
