@@ -10,9 +10,10 @@ pip install unitree_sdk2py google-genai
 
 ## Connection
 
-See [MAC_CONNECTION.md](MAC_CONNECTION.md) for how to connect a Mac to the G1 over Ethernet.
+See [MAC_CONNECTION.md](MAC_CONNECTION.md) for how to connect a Mac to the G1 over Ethernet, or [WINDOWS_CONNECTION.md](WINDOWS_CONNECTION.md) for Windows.
 
 - Mac interface: `en8`, IP: `192.168.123.222`
+- Windows: find your adapter with `Get-NetAdapter`, IP: `192.168.123.222`
 - Robot IP: `192.168.123.164`
 
 ## Scripts

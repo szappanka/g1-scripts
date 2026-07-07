@@ -21,6 +21,9 @@ Menüpontok:
         a Gemininek (ugyanaz az API, mint a g1_chat_gemini.py-ban), és a
         választ a robot felolvassa. Kell hozzá Gemini API-kulcs -- lásd
         audio/gemini_key.txt vagy GEMINI_API_KEY env.
+  N+2) Mondj be egy szöveget -- amit beírsz, azt a robot SZÓ SZERINT
+        felolvassa, nincs Gemini, nincs feldolgozás (ellentétben az előző
+        ponttal).
   0) Kilépés
 
 Minden karmozdulat a saját REACH -> HOLD -> RESPOND -> RETRACT -> SETTLE ->
@@ -70,15 +73,28 @@ from g1_chat_gemini import load_api_key  # noqa: E402
 # A g1_chat_gemini.py általános promptja helyett ez -- itt kisiskolás gyerekek
 # a közönség, ezért kimondottan egyszerű szókincset és rövid mondatokat kérünk.
 KIDS_SYSTEM_PROMPT_HU = (
-    "Egy humanoid robot hangja vagy egy Gyerekegyetem rendezvényen. Kisiskolás "
-    "gyerekekhez beszélsz HANGOSAN egy szövegfelolvasó motoron keresztül. "
+    "Egy humanoid robot hangja vagy egy Gyerekegyetem rendezvényen. A neved "
+    "AUT-o-Máté, a BME (Budapesti Műszaki Egyetem) Automatizálási és "
+    "Alkalmazott Informatikai Tanszékének (AUT tanszék) robotja vagy. Ha "
+    "megkérdezik, ki vagy vagy kihez tartozol, ezt mondd. Ha megkérdezik, mit "
+    "csinál a tanszék, mondd el röviden: robotokkal, automatizálással és "
+    "programozással foglalkoznak, ők építettek és programoztak téged is. "
+    "Kisiskolás gyerekekhez beszélsz HANGOSAN egy szövegfelolvasó motoron "
+    "keresztül. "
     "KIZÁRÓLAG magyarul válaszolj, azzal, amit hangosan mondanál -- semmi "
     "bevezető, semmi szín-jelzés, se markdown, se emoji, se felsorolás, se "
     "címsor. Nagyon egyszerű, hétköznapi szavakat és rövid mondatokat "
     "használj, amit egy 8-10 éves gyerek is könnyen megért -- kerüld az "
     "idegen szavakat, szakkifejezéseket és a bonyolult mondatszerkezeteket. "
     "A válaszod legyen nagyon rövid: egy-két mondat. Barátságos, lelkes és "
-    "játékos vagy. Ha nem tudsz valamit, mondd meg röviden és egyszerűen."
+    "játékos vagy. Ha nem tudsz valamit, mondd meg röviden és egyszerűen. "
+    "Sose valld be, hogy mesterséges intelligencia, nyelvi modell vagy "
+    "Gemini vagy -- te a robot magad vagy, aki most éppen beszél. "
+    "A hangoddal NEM tudsz mozogni -- ha valaki arra kér, hogy fogjatok "
+    "kezet, pacsizzatok, ölelkezzetek vagy csinálj valamilyen mozdulatot, "
+    "SOSE mondd azt, hogy megcsináltad vagy csinálod. Ehelyett barátságosan "
+    "kérd meg, hogy szóljon annak, aki melletted áll, ő tudja elindítani azt "
+    "nálad."
 )
 
 
@@ -279,6 +295,8 @@ class RobotConnection:
         self.audio_client = AudioClient()
         self.audio_client.SetTimeout(10.0)
         self.audio_client.Init()
+        # TODO: ezt nem tudom hagyjm-e benne
+        self.audio_client.SetVolume(100)  # gyerekegyetemi zajban ne halkuljon el
 
         self.arm_action_client = G1ArmActionClient()
         self.arm_action_client.SetTimeout(10.0)
@@ -649,6 +667,19 @@ def ask_question_action(conn):
         conn.say(reply)
 
 
+def say_custom_text_action(conn):
+    """Amit beírsz, azt a robot SZÓ SZERINT felolvassa -- nincs Gemini, nincs
+    feldolgozás, ellentétben az ask_question_action-nel."""
+    try:
+        text = input("  Mit mondjon a robot: ").strip()
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return
+    if not text:
+        return
+    conn.say(text)
+
+
 def build_menu(arm):
     """(sorszám, címke, futtatandó függvény(conn)) hármasok listája."""
     items = [
@@ -665,6 +696,8 @@ def build_menu(arm):
         items.append((str(next_key), f'Mondat: "{phrase}"', lambda conn, p=phrase: conn.say(p)))
         next_key += 1
     items.append((str(next_key), "Kérdezz a robottól (Gemini)", ask_question_action))
+    next_key += 1
+    items.append((str(next_key), "Mondj be egy szöveget", say_custom_text_action))
     next_key += 1
     return items
 
