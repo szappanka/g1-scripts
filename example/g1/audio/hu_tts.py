@@ -20,7 +20,7 @@ import miniaudio
 
 from wav import write_wave
 
-DEFAULT_VOICE = "hu-HU-NoemiNeural"
+DEFAULT_VOICE = "hu-HU-TamasNeural"
 TARGET_SAMPLE_RATE = 16000  # a robot AudioClient.PlayStream ezt várja
 
 

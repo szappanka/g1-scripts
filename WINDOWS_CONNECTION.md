@@ -1,5 +1,23 @@
 # G1 csatlakozás Windows-on
 
+## 0. Python csomagok telepítése
+
+A `unitree_sdk2py` nincs fent a PyPI-n, GitHub-ról kell telepíteni. A pinnelt
+`cyclonedds==0.10.2` függőségnek **csak Python 3.7–3.10-hez van Windows
+wheel-je** — ha 3.11+ Python fut a gépen, a pip forrásból próbálja buildelni
+a cyclonedds-t (kell hozzá Visual Studio Build Tools + CMake), ami tipikusan
+elhasal. Legegyszerűbb megoldás: Python 3.10 egy külön venv-ben.
+
+```powershell
+py -3.10 -m venv .venv
+.venv\Scripts\activate
+pip install git+https://github.com/unitreerobotics/unitree_sdk2_python.git
+pip install -r requirements.txt
+```
+
+(Ha nincs telepítve a 3.10-es Python, töltsd le a python.org-ról — a "py
+launcher" komponenst is pipáld be telepítéskor.)
+
 ## 1. Interfész neve (ha nem tudod)
 
 PowerShell-ben (admin):

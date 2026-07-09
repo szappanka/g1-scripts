@@ -644,7 +644,7 @@ def make_high_five(conn, arm, style):
     return ArmGestureAction(
         conn, arm, reach_pose=HIGH_FIVE_POSE[style][arm], watch_joint_names=WATCH_JOINTS_SLAP,
         timeout=10.0, react_on_timeout=False,
-        z_threshold=4.0, tau_margin=0.3, tau_max=2.0, dq_margin=0.1, dq_max=2.0,
+        z_threshold=4.0, tau_margin=0.2, tau_max=2.0, dq_margin=0.1, dq_max=2.0,
         min_hold=0.03, hit_gap=0.15,
         resp_amplitude=0.2, resp_hz=4.0, resp_cycles=1,
         kp=60.0, kd=1.5,

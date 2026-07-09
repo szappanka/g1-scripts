@@ -4,17 +4,24 @@ Personal scripts for the Unitree G1 robot.
 
 ## Dependencies
 
+`unitree_sdk2py` is not on PyPI — install it straight from GitHub (its pinned
+dependency `cyclonedds==0.10.2` only ships Windows wheels for Python 3.7–3.10,
+so use one of those versions on Windows or the pip install will try to
+compile cyclonedds from source and fail):
+
 ```bash
-pip install unitree_sdk2py google-genai
+pip install git+https://github.com/unitreerobotics/unitree_sdk2_python.git
+pip install -r requirements.txt
 ```
 
 ## Connection
 
-See [MAC_CONNECTION.md](MAC_CONNECTION.md) for how to connect a Mac to the G1 over Ethernet, or [WINDOWS_CONNECTION.md](WINDOWS_CONNECTION.md) for Windows.
+See [MAC_CONNECTION.md](MAC_CONNECTION.md) for how to connect a Mac to the G1 over Ethernet (includes SSH over WiFi via hostname), or [WINDOWS_CONNECTION.md](WINDOWS_CONNECTION.md) for Windows.
 
 - Mac interface: `en8`, IP: `192.168.123.222`
 - Windows: find your adapter with `Get-NetAdapter`, IP: `192.168.123.222`
 - Robot IP: `192.168.123.164`
+- SSH over university WiFi: `ssh unitree@ubuntu.local` (hostname-based, survives DHCP IP changes)
 
 ## Scripts
 

@@ -1,4 +1,4 @@
-unitree_sdk2py
+git+https://github.com/unitreerobotics/unitree_sdk2_python.git  # nincs fent a PyPI-n, csak git-rol telepitheto
 google-genai
 opencv-python
 mediapipe==0.10.9  # ujabb macOS wheelek (0.10.10+) mar nem tartalmazzak az mp.solutions API-t
