@@ -21,11 +21,15 @@ Használat:
     python3 g1_voice_chat_hu.py en6
     python3 g1_voice_chat_hu.py en6 --whisper-model small --voice hu-HU-TamasNeural
 
-Menete: Entert nyomsz -> beszélsz -> Entert nyomsz -> a robot válaszol. Ismétlés.
+Menete: a robot válasza után rögtön hallgat -- ha beszélni kezdesz, rögzíti,
+és ha 5 mp-ig csend van (a beszéd után), leállítja a felvételt és elküldi.
+Nincs Enter-nyomás, nincs kézi kalibrálás: a háttérzajt minden körben
+automatikusan méri egy röpke pillanat alatt.
 Kilépés: Ctrl+C.
 """
 
 import sys
+import time
 import argparse
 
 import numpy as np
@@ -42,29 +46,65 @@ from wav import play_pcm_stream
 from g1_chat_gemini import SYSTEM_PROMPT_HU, load_api_key
 
 SAMPLE_RATE = 16000
+BLOCK_SECONDS = 0.1
+NOISE_CALIBRATION_SECONDS = 0.3
+SILENCE_TIMEOUT = 5.0
+MAX_RECORD_SECONDS = 30.0
 
 
-def record_until_enter(device=None):
-    """Entertől Enterig rögzíti a mikrofont, 16kHz mono float32 tömbként adja vissza."""
+def record_until_silence(device=None, silence_timeout=SILENCE_TIMEOUT, max_seconds=MAX_RECORD_SECONDS):
+    """Automatikusan hallgatja a mikrofont: nincs Enter, nincs kézi kalibrálás.
+
+    Elsőként pár tized másodpercig méri a háttérzajt (ez nem egy "állj
+    csendben" lépés a felhasználónak, csak a küszöb automatikus beállítása).
+    Onnantól a küszöb fölötti hangerőt tekinti beszédnek, és ha a beszéd
+    kezdete után `silence_timeout` másodpercig csend van, lezárja a felvételt.
+    16kHz mono float32 tömbként adja vissza (üres tömb, ha nem történt beszéd).
+    """
+    block_size = int(SAMPLE_RATE * BLOCK_SECONDS)
     frames = []
+    noise_samples = []
+    noise_floor = None
+    speaking = False
+    silence_since = None
+    started_at = time.monotonic()
 
-    def callback(indata, _frame_count, _time_info, _status):
-        frames.append(indata.copy())
+    print("Hallgatom... (ha végeztél a beszéddel, csak hagyd abba -- 5 mp csend után elküldöm)")
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32",
+                        device=device) as stream:
+        while True:
+            block, _ = stream.read(block_size)
+            block = block.flatten()
+            rms = float(np.sqrt(np.mean(np.square(block)))) if block.size else 0.0
 
-    input("Nyomj Entert, majd beszélj...")
-    print("Felvétel... nyomj Entert, ha végeztél.")
-    stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=callback, device=device)
-    stream.start()
-    input()
-    stream.stop()
-    stream.close()
+            if noise_floor is None:
+                noise_samples.append(rms)
+                if len(noise_samples) * BLOCK_SECONDS >= NOISE_CALIBRATION_SECONDS:
+                    noise_floor = max(float(np.mean(noise_samples)), 0.001)
+                continue
 
-    if not frames:
+            threshold = noise_floor * 3.0 + 0.01
+            frames.append(block)
+
+            if rms > threshold:
+                if not speaking:
+                    print("(beszéd érzékelve...)")
+                speaking = True
+                silence_since = None
+            elif speaking:
+                if silence_since is None:
+                    silence_since = time.monotonic()
+                elif time.monotonic() - silence_since >= silence_timeout:
+                    break
+
+            if time.monotonic() - started_at >= max_seconds:
+                print("(elért a max. felvételi idő)")
+                break
+
+    if not speaking or not frames:
         return np.zeros(0, dtype=np.float32)
     audio = np.concatenate(frames, axis=0).flatten()
 
-    # Gyors ellenőrzés: ha a felvétel gyakorlatilag néma/zajos (rossz eszköz,
-    # hiányzó mikrofon-jogosultság), a Whisper akkor is halandzsát fog "felismerni".
     rms = float(np.sqrt(np.mean(np.square(audio)))) if audio.size else 0.0
     print(f"(felvétel szintje: {rms:.4f} -- ha ez ~0, a mikrofon nem vesz fel semmit)")
     return audio
@@ -85,6 +125,8 @@ def main():
     parser.add_argument("--voice", default=DEFAULT_VOICE,
                         help=f"edge-tts hang (alap: {DEFAULT_VOICE}, másik opció: hu-HU-TamasNeural)")
     parser.add_argument("--volume", type=int, default=90, help="hangerő 0-100 (alap: 90)")
+    parser.add_argument("--silence-timeout", type=float, default=SILENCE_TIMEOUT,
+                        help=f"hány mp csend után zárja le a felvételt beszéd után (alap: {SILENCE_TIMEOUT})")
     args = parser.parse_args()
 
     if args.list_devices:
@@ -130,7 +172,7 @@ def main():
     print("Hangos beszélgetés a G1-gyel (magyarul). Kilépés: Ctrl+C.\n")
     try:
         while True:
-            recording = record_until_enter(device=args.device)
+            recording = record_until_silence(device=args.device, silence_timeout=args.silence_timeout)
             if recording.size == 0:
                 continue
 
